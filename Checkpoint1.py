@@ -7,6 +7,7 @@ Created on Fri Jan 16 11:01:35 2026
 """
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
 class IsingModel(object):
     
@@ -16,6 +17,7 @@ class IsingModel(object):
         
         # Defining parameters for the lattice
         self.n = n # Size of the two-dimensional square lattice
+        self.N = n * n # number of squares in lattice
         self.T = T # thermal energy
         self.lattice = None
         
@@ -26,28 +28,6 @@ class IsingModel(object):
         self.lattice = np.random.choice([-1,1], size = (self.n, self.n))
         
         return self.lattice
-        
-    # Check if i did the indicies correct?!
-    def calculate_energy(self, i, j, site_spin):
-    # Is this the same for glauber and kawasaki dynamics?
-    
-        # get the nearest neighbours of the site using modulus for periodic boundaries
-        up = self.lattice[(i - 1) % self.n, j]
-        down = self.lattice[(i + 1) % self.n, j]
-        left = self.lattice[i, (j - 1) % self.n]
-        right = self.lattice[i, (j + 1) % self.n]
-    
-        # energy = - site * (sum of nearest neighbours)
-        return - site_spin * (up + down + left + right)
-    
-    def calculate_total_energy(self):
-        # Sum of -J * Si * Sj for all unique neighbor pairs
-        # Using np.roll allows us to calculate all "right" and "down" bonds efficiently
-        # This avoids double-counting bonds.
-        energy = - (np.sum(self.lattice * np.roll(self.lattice, 1, axis=0)) +
-                    np.sum(self.lattice * np.roll(self.lattice, 1, axis=1)))
-        
-        return energy
     
     def glauber_dynamics(self):
     
@@ -107,7 +87,7 @@ class IsingModel(object):
         
         # if the spins are the same, swap does nothing
         if site_ij_spin == site_km_spin:
-            return self.lattice
+            return self.lattice, 0
         
         # calculate energy of the current state
         E_current = self.calculate_energy(i, j, site_ij_spin) + self.calculate_energy(k, m, site_km_spin)
@@ -153,15 +133,38 @@ class IsingModel(object):
                 self.lattice[k, m] = site_ij_spin
                 
         return self.lattice, del_E
+            
+    # Check if i did the indicies correct?!
+    def calculate_energy(self, i, j, site_spin):
+    # Is this the same for glauber and kawasaki dynamics?
+    
+        # get the nearest neighbours of the site using modulus for periodic boundaries
+        up = self.lattice[(i - 1) % self.n, j]
+        down = self.lattice[(i + 1) % self.n, j]
+        left = self.lattice[i, (j - 1) % self.n]
+        right = self.lattice[i, (j + 1) % self.n]
+    
+        # energy = - site * (sum of nearest neighbours)
+        return - site_spin * (up + down + left + right)
     
     def calculate_magnetisation(self):
         
         # magnetisation is the sum of the spins divided by n
         # M = (spin ups + spin downs) / N^2 = np.mean
         return np.sum(self.lattice)
+    
+    def calculate_total_energy(self):
+        # Sum of -J * Si * Sj for all unique neighbor pairs
+        # Using np.roll allows us to calculate all "right" and "down" bonds efficiently
+        # This avoids double-counting bonds.
+        tot_E = - (np.sum(self.lattice * np.roll(self.lattice, 1, axis=0)) +
+                    np.sum(self.lattice * np.roll(self.lattice, 1, axis=1)))
         
-    #def calculate_specific_heat(self):
-        
+        return tot_E
+    
+    
+    
+    
     
 class Simulation(object):
     
@@ -172,7 +175,7 @@ class Simulation(object):
         self.dynamics = dynamics    
         self.ising_model = IsingModel(n, T)
         self.ising_model.initialise()
-        self.sweep = n * n # 1 sweep is n x n steps
+        self.N = n * n # 1 sweep is n x n steps
         
         # empty arrays to hold data
         self.steps = []
@@ -187,17 +190,11 @@ class Simulation(object):
         im = ax.imshow(self.ising_model.lattice, cmap='binary', vmin=-1, vmax=1)
         
         # allow the user to choose the dynamics used
-        if self.dynamics == "glauber":
-            print("Glauber dynamics was chosen.")
+        if self.dynamics == 'g':
             dynamics = self.ising_model.glauber_dynamics
             
-        elif self.dynamics == "kawasaki":
-            print("Kawasaki dynamics was chosen.")
-            dynamics = self.ising_model.kawasaki_dynamics
-            
         else:
-            print("Dynamics not recognised.")
-        
+            dynamics = self.ising_model.kawasaki_dynamics
         
         for s in range(steps):
             dynamics()
@@ -217,88 +214,68 @@ class Simulation(object):
         # This keeps the final window open when the loop finishes.
         plt.show()
         
-    def run_magnetisation_and_susceptibility(self, file):
+    def calculate_average_energy(self, tot_E_list):
         
-        # create a range for k_B T between 3 and 1 in steps of 0.1
-        temperatures = np.arange(3.0, 0.9, -0.1)
-        
-        # generate an initial model to start with at the hottest T (3) 
-        model = IsingModel(self.n, 3)
-        model.initialise()
-        
-        # number of total sites
-        N = self.n**2
-        
-        # iterate through all temperatures
-        for T in temperatures:
-            print(f"Simulating T = {T:.1f}...")
-            
-            # make sure the model knows the new temperature
-            model.T = T
-            
-            # start counts at zero
-            counts = 0
-            
-            # make empty list for the new temperature
-            m = []
-            
-            while counts < 10100 * N:
-                
-                # at each temperature, run the simulation
-                model.glauber_dynamics()
-                
-                # add 1 to the counts
-                counts += 1
-                
-                # need to wait 100 sweeps for equilibrium
-                if counts < 100 * N:
-                    continue
-                
-                # take a measurement every 10 sweeps
-                if counts % (N * 10) == 0:
-                    
-                    # calculate magnetisation 
-                    m.append(model.calculate_magnetisation())
-                    
-                    # convert to an array
-                    mag = np.array(m)
-                        
-                    # calculate average magnetisation
-                    # use absolute values to avoid M averaging to 0
-                    avg_mag = np.mean(np.abs(mag))
-                    
-                    # calculate susceptibility where chi = 1/(N*T) * (<M^2> - <M>^2)
-                    chi = (np.mean(mag**2) - np.mean(mag)**2) / (N * T)
-                    #print(avg_mag, chi, T)
-                    
-                    # write the values into a file
-                    f = open(file, "a")
-                    f.write(f"{T}\n{avg_mag}\n{chi}\n")
-                    f.close()
-        
-    def run_energy_and_specific_heat(self, file):
-        
-        # create a range for k_B T between 3 and 1 in steps of 0.1
-        temperatures = np.arange(3.0, 0.9, -0.1)
-        
-        # generate an initial model to start with at the hottest T (3) 
-        model = IsingModel(self.n, 3)
-        model.initialise()
-        
-        # should this be inside or outside the loop?? (dont answer)
-        # allow the user to choose the dynamics used
-        if self.dynamics == "glauber":
-            dynamics = model.glauber_dynamics
+        # calculate the average energy
+        return np.mean(tot_E_list)
     
-        elif self.dynamics == "kawasaki":
-            dynamics = model.kawasaki_dynamics
-            
-        else:
-            print("Dynamics not recognised.")
-            return
+    def calculate_specific_heat(self, tot_E_list):
+
+        # calculate specific heat
+        return np.var(tot_E_list) / (self.N * self.T**2)
+    
+    def calculate_average_magnetisation(self, tot_M_list):
         
-        # calculate total energy 
-        tot_E = model.calculate_total_energy()
+        # can't remember if tyler said np.abs is good or bad?
+        return np.abs(np.mean(tot_M_list))
+    
+    def calculate_susceptibility(self, tot_M_list):
+        
+        # is np.abs good here?
+        return np.var(np.abs(tot_M_list)) / (self.N * self.T)
+    
+    def bootstrap_method(self, data):
+        
+        # convert to numpy array
+        data = np.array(data)
+        
+        n = len(data)
+        resampled_values = []
+        
+        # resampling 1000 times is sufficient
+        for j in range(1000):
+            
+             # randomnly resample from the n measurements
+             ind = np.random.randint(0, n, size = n)
+             resample = data[ind]
+             
+             # calculate specific heat accordingly
+             value = np.var(resample) / (self.N * self.T**2)
+             
+             # append to the list
+             resampled_values.append(value)
+        
+        # calculate and return error which is the standard deviation of the resampled values
+        return np.std(np.array(resampled_values))
+        
+    def run_kawasaki(self, filename):
+        
+        # define datafiles output directory
+        base_directory = os.path.dirname(os.path.abspath(__file__))
+        outputs_directory = os.path.join(base_directory, "outputs")
+        datafiles_folder = os.path.join(outputs_directory, "datafiles")
+        file_path = os.path.join(datafiles_folder, filename)
+        
+        # if the folders dont exist, create them
+        if not os.path.exists(datafiles_folder):
+            os.makedirs(datafiles_folder)
+        
+        # create a range for k_B T between 3 and 1 in steps of 0.1
+        temperatures = np.arange(3.0, 0.9, -0.1)
+        
+        # generate an initial model to start with at the hottest T (3) 
+        model = IsingModel(self.n, 3)
+        model.initialise()
         
         # number of total sites
         N = self.n**2
@@ -313,11 +290,17 @@ class Simulation(object):
             # start counts at zero
             counts = 0
             
+            # make an empty list for the new temperature 
+            tot_E_list = []
+            
+            # calculate total energy 
+            tot_E = model.calculate_total_energy()
+            
             while counts < 10100 * N:
                 
                 # at each temperature, run the simulation
-                lattice, del_E = dynamics()
-            
+                lattice, del_E = model.kawasaki_dynamics()
+                
                 # add 1 to the counts
                 counts += 1
             
@@ -331,29 +314,124 @@ class Simulation(object):
                     # update the total energy using the energy difference
                     tot_E += del_E
                     
-                    # calculate the average energy
-                    avg_E = np.mean(tot_E)
-    
-                    # calculate specific heat
-                    spec_he = (np.mean(tot_E**2) - np.mean(tot_E)) / (N * T**2)
+                    # append temperature to the list
+                    tot_E_list.append(tot_E)
+                    
+            # after completing all the measurements for the temperature
+            # calculate the average energy and specific heat
+            avg_E = self.calculate_average_energy(tot_E_list)
+            spec_he = self.calculate_specific_heat(tot_E_list)
+            spec_he_err = self.bootstrap_method(tot_E_list)
+         
+            # write the values into a file
+            with open(file_path, "a") as f:
+                f.write(f"{T},{avg_E},{spec_he},{spec_he_err}\n")
                 
-                    # write the values into a file
-                    f = open(file, "a")
-                    f.write(f"{T}\n{avg_E}\n{spec_he}\n")
-                    f.close()
+    def run_glauber(self, filename1, filename2):
+        
+        # define datafiles output directory
+        base_directory = os.path.dirname(os.path.abspath(__file__))
+        outputs_directory = os.path.join(base_directory, "outputs")
+        datafiles_folder = os.path.join(outputs_directory, "datafiles")
+        file1_path = os.path.join(datafiles_folder, filename1)
+        file2_path = os.path.join(datafiles_folder, filename2)
+        
+        # if the folders dont exist, create them
+        if not os.path.exists(datafiles_folder):
+            os.makedirs(datafiles_folder)
+        
+        # create a range for k_B T between 3 and 1 in steps of 0.1
+        temperatures = np.arange(3.0, 0.9, -0.1)
+        
+        # generate an initial model to start with at the hottest T (3) 
+        model = IsingModel(self.n, 3)
+        model.initialise()
+        
+        # number of total sites
+        N = self.n**2
+        
+        # iterate through all temperatures
+        for T in temperatures:
+            print(f"Simulating T = {T:.1f}...")
+            
+            # make sure the model knows the new temperature
+            model.T = T
+            
+            # start counts at zero
+            counts = 0
+            
+            # make an empty list for the new temperature 
+            tot_E_list = []
+            tot_M_list = []
+            
+            # calculate total energy 
+            tot_E = model.calculate_total_energy()
+            
+            while counts < 10100 * N:
+                
+                # at each temperature, run the simulation
+                lattice, del_E = model.glauber_dynamics()
+                
+                # add 1 to the counts
+                counts += 1
+            
+                # need to wait 100 sweeps for equilibrium
+                if counts < 100 * N:
+                    continue
+                
+                # take a measurement every 10 sweeps
+                if counts % (N * 10) == 0:
+                    
+                    # calculate magnetisation 
+                    tot_M_list.append(model.calculate_magnetisation())
+                    
+                    # update the total energy using the energy difference
+                    tot_E += del_E
+                    
+                    # append temperature to the list
+                    tot_E_list.append(tot_E)
+                    
+            # after completing all the measurements for the temperature
+            # calculate the average energy and specific heat
+            avg_E = self.calculate_average_energy(tot_E_list)
+            spec_he = self.calculate_specific_heat(tot_E_list)
+            spec_he_err = self.bootstrap_method(tot_E_list)
+            
+            # calculate average magnetisation and susceptibility
+            avg_mag = self.calculate_average_magnetisation(tot_M_list)
+            chi = self.calculate_susceptibility(tot_M_list)
+         
+            # write the values into a file
+            with open(file1_path, "a") as f:
+                f.write(f"{T},{avg_E},{spec_he},{spec_he_err}\n")
+                
+            # write the values into a file
+            with open(file2_path, "a") as f:
+                f.write(f"{T},{avg_mag},{chi}\n")
 
     def plot_magnetisation_and_susceptibility(self, filename):
+        
+        # define datafiles output directory
+        base_directory = os.path.dirname(os.path.abspath(__file__))
+        outputs_directory = os.path.join(base_directory, "outputs")
+        filename_path = os.path.join(outputs_directory, "datafiles", filename)
+        plots_folder = os.path.join(outputs_directory, "plots")
+
+        # if the folders dont exist, create them
+        if not os.path.exists(plots_folder):
+            os.makedirs(plots_folder)
         
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 10))
 
         # create an empty list to store input data
         input_data = []        
 
-        # read in the data from file
-        filein = open(filename, "r")
-        for line in filein.readlines():
-            input_data.extend(line.strip(" \n").split(","))
-        filein.close()
+        try:
+            with open(filename_path, "r") as filein:
+                for line in filein:
+                    input_data.extend(line.strip(" \n").split(","))
+        except FileNotFoundError:
+            print(f"Error: Could not find {filename_path}")
         
         # create emptry lists to hold temperature, magnetisation and susceptibility    
         temperatures = []
@@ -374,91 +452,205 @@ class Simulation(object):
             susceptibility.append(sus)
         
         # plot average magnetisation
-        ax1. plot(temperatures, magnetisation, 'o-', color='blue')
+        ax1.plot(temperatures, magnetisation, 'o-', color='blue', 
+                 markerfacecolor = 'black', markeredgecolor = 'black',
+                 markersize = 4)
         ax1.set_ylabel("Average Total Magnetisation")
         ax1.set_title("Average Total Magnetisation Versus Thermal Energy")
         ax1.grid(True)
         
         # plot susceptibility
-        ax2.plot(temperatures, susceptibility, 's-', color='red')
+        ax2.plot(temperatures, susceptibility, 'o-', color='red', 
+                 markerfacecolor = 'black', markeredgecolor = 'black',
+                 markersize = 4)
         ax2.set_xlabel("Thermal Energy (k_B T)")
         ax2.set_ylabel("Susceptibility (chi)")
         ax2.set_title("Susceptibility Versus Thermal Energy")
         ax2.grid(True)
         
         plt.tight_layout()
+        
+        # save the plots to the plots folder
+        save_filename = filename.replace(".txt", "_plot.png")
+        save_path = os.path.join(plots_folder, save_filename)
+        plt.savefig(save_path, dpi = 300)
+        print(f"Plot successfully saved to: {save_path}")
         plt.show()
     
     def plot_energy_and_specific_heat(self, filename):
         
+        # define datafiles output directory
+        base_directory = os.path.dirname(os.path.abspath(__file__))
+        outputs_directory = os.path.join(base_directory, "outputs")
+        filename_path = os.path.join(outputs_directory, "datafiles", filename)
+        plots_folder = os.path.join(outputs_directory, "plots")
+        
+        # if the folders dont exist, create them
+        if not os.path.exists(plots_folder):
+            os.makedirs(plots_folder)
+        
+        # create empty plots
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 10))
         
         # create an empty list to store input data
-        input_data = []        
-
-        # read in the data from file
-        filein = open(filename, "r")
-        for line in filein.readlines():
-            input_data.extend(line.strip(" \n").split(","))
-        filein.close()
+        input_data = []      
+        
+        try:
+            with open(filename_path, "r") as filein:
+                for line in filein:
+                    input_data.extend(line.strip(" \n").split(","))
+        except FileNotFoundError:
+            print(f"Error: Could not find {filename_path}")
         
         # create emptry lists to hold temperature, magnetisation and susceptibility    
         temperatures = []
         total_energy = []
         specific_heat = []
+        specific_heat_error =[]
         
         # iterate through input data and append to empty lists
-        for i in range(0, len(input_data), 3):
+        for i in range(0, len(input_data), 4):
             
             # obtain vlaue from input data
             temp = float(input_data[i])
             tot_e = float(input_data[i+1])
             spec_he = float(input_data[i+2])
+            spec_he_err = float(input_data[i+3])
 
             # append to empty lists
             temperatures.append(temp)
             total_energy.append(tot_e)
             specific_heat.append(spec_he)
+            specific_heat_error.append(spec_he_err)
         
         # plot average magnetisation
-        ax1. plot(temperatures, total_energy, 'o-', color='blue')
+        ax1.plot(temperatures, total_energy, 'o-', color='blue', 
+                 markerfacecolor = 'black', markeredgecolor = 'black',
+                 markersize = 4)
         ax1.set_ylabel("Average Total Energy")
         ax1.set_title("Average Total Energy Versus Thermal Energy")
         ax1.grid(True)
         
         # plot susceptibility
-        ax2.plot(temperatures, specific_heat, 's-', color='red')
+        ax2.errorbar(temperatures, specific_heat, yerr = specific_heat_error, 
+                 fmt='o-', color='red', ecolor='black', markerfacecolor = 'black', markeredgecolor = 'black',
+                 capsize=3, elinewidth=1, markeredgewidth=1, markersize = 4)
         ax2.set_xlabel("Thermal Energy (k_B T)")
         ax2.set_ylabel("Heat Capacity per Spin")
         ax2.set_title("Heat Capacity per Spin Versus Thermal Energy")
         ax2.grid(True)
         
         plt.tight_layout()
-        plt.show()
         
-# let n be the lattice size
-n = 50
+        # save the plots to the plots folder
+        save_filename = filename.replace(".txt", "_plot.png")
+        save_path = os.path.join(plots_folder, save_filename)
+        plt.savefig(save_path, dpi = 300)
+        print(f"Plot successfully saved to: {save_path}")
+        
+        # show plots
+        plt.show()
+    
+    
 
-# critical T is approx 2.26
-T = 2
+def lattice_size_prompt():
 
-# choose the dynamics model 
-ising_model_simulation = Simulation(n, T, dynamics = "glauber")
-#ising_model_simulation = Simulation(n, T, dynamics = "kawasaki")
+    while True:
+        try:
+            n = int(input("Enter system size (n): "))
+            if n > 0:
+                return n
+        except ValueError:
+            print("Please enter a valid integer.")
+            
+def temperature_promt():
 
-# to run the animation 
-#ising_model_simulation.simulate() # glauber or kawasaki
+    while True:
+        try:
+            T = float(input("Enter temperature (T): "))
+            if T >= 1 and T <= 3:
+                return T
+            
+            else:
+                print("The temperature must be a float between 1 and 3. Please try again.")
+                
+        except ValueError:
+            print("The temperature must be a float between 1 and 3. Please try again.")
+                
+def dynamics_prompt():
+    
+    dynamics = input("Enter the desired dynamics to be used, 'g' for Glauber or 'k' for Kawasaki: ")
+    
+    while dynamics not in ['g', 'k']:
+        print("Dynamics not recognised. Please try again.")
+        dynamics = input("Enter the desired dynamics to be used, 'g' for Glauber or 'k' for Kawasaki: ")
+        
+    return dynamics
+    
 
-# define file names to save data to
-filename = "g_mag_sus_1.txt"
-filename = "g_ene_spec_he_1.txt"
-filename = "k_ene_spec_he_1.txt"
-
-# to collect data (need to do this before plotting!)
-ising_model_simulation.run_magnetisation_and_susceptibility(filename) # glauber
-#ising_model_simulation.run_energy_and_specific_heat(filename) # glauber
-#ising_model_simulation.run_energy_and_specific_heat(filename) # kawasaki
-
-# to plot the graphs
-ising_model_simulation.plot_magnetisation_and_susceptibility(filename) # only glauber
-#ising_model_simulation.plot_energy_and_specific_heat(filename) # glauber or kawasaki
+if __name__ == "__main__":
+    
+    # promt for required values
+    ani_or_mea = input("Enter 'a' for Animation or 'm' for Measurements: ")
+    
+    while ani_or_mea not in ['a', 'm']:
+        
+        print("Invalid entry. Please try again.")
+        ani_or_mea = input("Enter 'a' for Animation or 'm' for Measurements: ")
+    
+    if ani_or_mea == 'a':
+        
+        print("Animation selected")
+        
+        # prompts
+        n = lattice_size_prompt()
+        T = temperature_promt()
+        dynamics = dynamics_prompt()
+        
+        # initialise
+        sim = Simulation(n, T, dynamics)
+        sim.simulate()
+    
+    elif ani_or_mea == 'm':
+        
+        print("Measurements selected")
+        
+        # promts
+        n = lattice_size_prompt()
+        T = temperature_promt()
+        dynamics = dynamics_prompt()
+        
+        # initialise 
+        sim = Simulation(n, T, dynamics)
+        
+        if dynamics == 'g':
+            print("Glauber dynamics was chosen.")
+            print("Measurements will be taken for the average energy, average absolute value of the magnetisation,")
+            print("specific heat and susceptibility.")
+            print("Measurements beginning...")
+            
+            # define filenames
+            filename1 = "glauber_energy_and_specific_heat_1.txt"
+            filename2 = "glauber_magnetisation_and_susceptibility_2.txt"
+            
+            # run the simulation
+            sim.run_glauber(filename1, filename2)
+            
+            # plot the data
+            sim.plot_energy_and_specific_heat(filename1)
+            sim.plot_magnetisation_and_susceptibility(filename2)
+            
+            
+        else:
+            print("Kawasaki dynamics was chosen.")
+            print("Measurements will be taken for the average energy and specific heat.")
+            print("Measurements beginning...")
+            
+            # define filename
+            filename = "kawasaki_energy_and_specific_heat_1.txt"
+            
+            # run the simulation
+            sim.run_kawasaki(filename)
+            
+            # plot the data
+            sim.plot_energy_and_specific_heat(filename)
