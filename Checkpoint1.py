@@ -52,6 +52,8 @@ class IsingModel(object):
             # flip the sign
             self.lattice[i,j] *= -1
             
+            return self.lattice, del_E
+            
         # otherwise, flip the spin with boltzmann probability
         else: 
             # generate a random number r in [0, 1]
@@ -64,7 +66,14 @@ class IsingModel(object):
                 # flip the sign
                 self.lattice[i,j] *= -1
                 
-        return self.lattice, del_E
+                return self.lattice, del_E
+            
+            
+            # here is the code change!!!!
+        # if we reach here, no flip happened
+        # so, we must return del_E = 0
+        return self.lattice, 0
+            
     
     def kawasaki_dynamics(self):
         
@@ -90,10 +99,10 @@ class IsingModel(object):
             return self.lattice, 0
         
         # calculate energy of the current state
-        E_current = self.calculate_energy(i, j, site_ij_spin) + self.calculate_energy(k, m, site_km_spin)
+        E_current = self.calculate_energy_difference(i, j, site_ij_spin) + self.calculate_energy_difference(k, m, site_km_spin)
         
         # calculate energy of the trial state
-        E_trial = self.calculate_energy(i, j, site_km_spin) + self.calculate_energy(k, m, site_ij_spin)
+        E_trial = self.calculate_energy_difference(i, j, site_km_spin) + self.calculate_energy_difference(k, m, site_ij_spin)
         
         # calcualte the change in current and trial state
         del_E = E_trial - E_current
@@ -135,7 +144,7 @@ class IsingModel(object):
         return self.lattice, del_E
             
     # Check if i did the indicies correct?!
-    def calculate_energy(self, i, j, site_spin):
+    def calculate_energy_difference(self, i, j, site_spin):
     # Is this the same for glauber and kawasaki dynamics?
     
         # get the nearest neighbours of the site using modulus for periodic boundaries
@@ -303,6 +312,9 @@ class Simulation(object):
                 
                 # add 1 to the counts
                 counts += 1
+                
+                # update the total energy using the energy difference
+                tot_E += del_E
             
                 # need to wait 100 sweeps for equilibrium
                 if counts < 100 * N:
@@ -310,9 +322,6 @@ class Simulation(object):
                 
                 # take a measurement every 10 sweeps
                 if counts % (N * 10) == 0:
-                    
-                    # update the total energy using the energy difference
-                    tot_E += del_E
                     
                     # append temperature to the list
                     tot_E_list.append(tot_E)
@@ -374,6 +383,9 @@ class Simulation(object):
                 
                 # add 1 to the counts
                 counts += 1
+                
+                # update the total energy using the energy difference
+                tot_E += del_E
             
                 # need to wait 100 sweeps for equilibrium
                 if counts < 100 * N:
@@ -384,9 +396,6 @@ class Simulation(object):
                     
                     # calculate magnetisation 
                     tot_M_list.append(model.calculate_magnetisation())
-                    
-                    # update the total energy using the energy difference
-                    tot_E += del_E
                     
                     # append temperature to the list
                     tot_E_list.append(tot_E)
@@ -630,8 +639,8 @@ if __name__ == "__main__":
             print("Measurements beginning...")
             
             # define filenames
-            filename1 = "glauber_energy_and_specific_heat_1.txt"
-            filename2 = "glauber_magnetisation_and_susceptibility_2.txt"
+            filename1 = "glauber_energy_and_specific_heat_4_energyloopfixed.txt"
+            filename2 = "glauber_magnetisation_and_susceptibility_4_energyloopfixed.txt"
             
             # run the simulation
             sim.run_glauber(filename1, filename2)
@@ -647,7 +656,7 @@ if __name__ == "__main__":
             print("Measurements beginning...")
             
             # define filename
-            filename = "kawasaki_energy_and_specific_heat_1.txt"
+            filename = "kawasaki_energy_and_specific_heat_4_energyloopfixed.txt"
             
             # run the simulation
             sim.run_kawasaki(filename)
