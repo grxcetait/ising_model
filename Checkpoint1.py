@@ -91,20 +91,34 @@ class IsingModel(object):
         
         # Calculate the change in energy between current and trial state
         del_E = - 2 * E_current
-        
-        # Flip the sign of the lattice site according to the Metropolis algorithm
-        # Flip the sign if del_E is equal to or less than zero OR
-        # If r is less than the boltzmann probability
-        if del_E <= 0 or np.random.random() < np.exp(- del_E / self.T):
+
+        # Flip the signs of the lattice sites according to the Metropolis algorithm
+        # Flip the signs if del_E is equal to or less than zero
+        if del_E <= 0:
             
             # Flip the sign
             self.lattice[i,j] *= -1
             
             # Return the updated lattice and the change in energy
             return self.lattice, del_E
+        
+        else:
             
-        # If we reach here, no flip happened, so return del_E = 0
-        return self.lattice, 0
+            # Generate a random number
+            r = np.random.random()
+        
+            # Swap the signs if r is less than the boltzmann probability
+            if r < np.exp(- del_E / self.T):
+            
+                # Flip the sign
+                self.lattice[i,j] *= -1
+                
+                # Return the updated lattice and the change in energy
+                return self.lattice, del_E
+            
+            else:
+                # If we reach here, no flip happened, so return del_E = 0
+                return self.lattice, 0
             
     
     def kawasaki_dynamics(self):
@@ -165,13 +179,12 @@ class IsingModel(object):
         # If the sites are neighbours, the change in energy double counted the same site
         # Twice in the current and trial states
         # So, correct for it by adding 4 since the spins are always opposite 
-        #if is_neighbor:
-         #   del_E += 4 
+        if is_neighbor:
+           del_E += 4 
 
         # Swap the signs of the lattice sites according to the Metropolis algorithm
-        # Swap the signs if del_E is equal to or less than zero OR
-        # If r is less than the boltzmann probability
-        if del_E <= 0 or np.random.random() < np.exp(- del_E / self.T):
+        # Swap the signs if del_E is equal to or less than zero
+        if del_E <= 0:
             
             # Swap the sites
             self.lattice[i, j] = site_km_spin
@@ -179,9 +192,25 @@ class IsingModel(object):
             
             # Return the updated lattice and the change in energy
             return self.lattice, del_E
+        
+        else:
+            
+            # Generate a random number
+            r = np.random.random()
+        
+            # Swap the signs if r is less than the boltzmann probability
+            if r < np.exp(- del_E / self.T):
+            
+                # Swap the sites
+                self.lattice[i, j] = site_km_spin
+                self.lattice[k, m] = site_ij_spin
                 
-        # If we reach here, no swap happened, so return del_E = 0
-        return self.lattice, 0
+                # Return the updated lattice and the change in energy
+                return self.lattice, del_E
+            
+            else:
+                # If we reach here, no swap happened, so return del_E = 0
+                return self.lattice, 0
             
     def calculate_energy(self, i, j, site_spin):
         """
@@ -291,7 +320,7 @@ class Simulation(object):
         self.ising_model = IsingModel(n, T) # Pass parameters into IsingModel
         self.ising_model.initialise() # Create the initial Ising Model square lattice
     
-    def simulate(self, steps = 50100):
+    def simulate(self, steps = 100100):
         """
         Runs an animation of the square lattice according to the chosen Monte
         Carlo simulation dynamics (Glauber or Kawasaki).
@@ -398,7 +427,8 @@ class Simulation(object):
         """
         
         # Calcualte and return the mean absolute magnetisation
-        return np.abs(np.mean(tot_M_list))
+        #return np.abs(np.mean(tot_M_list))
+        return np.mean(tot_M_list)                                                # no absolute value!
     
     def calculate_susceptibility(self, tot_M_list):
         """
@@ -420,7 +450,8 @@ class Simulation(object):
         """
         
         # Calculate and return the susceptibilty
-        return np.var(np.abs(tot_M_list)) / (self.N * self.T)
+        #return np.var(np.abs(tot_M_list)) / (self.N * self.T)
+        return np.var(tot_M_list) / (self.N * self.T)                                        # no absolute value!
     
     def bootstrap_method(self, data):
         """
@@ -509,8 +540,9 @@ class Simulation(object):
         for T in temperatures:
             print(f"Simulating T = {T:.1f}...")
             
-            # Make sure the model knows the new temperature
+            # Make sure the model and this class knows the new temperature
             model.T = T
+            self.T = T
             
             # Start counts at zero
             counts = 0
@@ -535,15 +567,15 @@ class Simulation(object):
                     continue
                 
                 # Calculate the initial energy right after equilibrium
-                if tot_E is None:
+                elif tot_E is None:
                     tot_E = model.calculate_total_energy()
                 
                 # Update the total energy using the energy difference
                 else:
                     tot_E += del_E
-                
+                    
                 # Take a measurement every 10 sweeps
-                if counts % (self.N * 10) == 0:
+                if counts % (self.N * 10) == 0 and counts > 100 * self.N:
                     
                     # Append temperature to the list
                     tot_E_list.append(tot_E)
@@ -605,8 +637,9 @@ class Simulation(object):
         for T in temperatures:
             print(f"Simulating T = {T:.1f}...")
             
-            # Make sure the model knows the new temperature
+            # Make sure the model this class knows the new temperature
             model.T = T
+            self.T = T
             
             # Start counts at zero
             counts = 0
@@ -640,7 +673,7 @@ class Simulation(object):
                     tot_E += del_E
                 
                 # Take a measurement every 10 sweeps
-                if counts % (self.N * 10) == 0:
+                if counts % (self.N * 10) == 0 and counts > 100 * self.N:
                     
                     # Calculate magnetisation 
                     tot_M_list.append(model.calculate_magnetisation())
@@ -964,7 +997,7 @@ if __name__ == "__main__":
         
         # Prompt the user for measurement parameters
         n = lattice_size_prompt()
-        T = 0 # since measurements option doesn't need a temperature
+        T = 3 # since measurements option doesn't need a temperature
         dynamics = dynamics_prompt()
         
         # Initialise the simulation
@@ -980,8 +1013,8 @@ if __name__ == "__main__":
             print("Measurements beginning...")
             
             # Define filenames
-            filename1 = "glauber_energy_and_specific_heat_5.txt"
-            filename2 = "glauber_magnetisation_and_susceptibility_5.txt"
+            filename1 = "glauber_energy_and_specific_heat_8_noabsvalue.txt"
+            filename2 = "glauber_magnetisation_and_susceptibility_8_noabsvalue.txt"
             
             # Run the simulation
             sim.run_glauber(filename1, filename2)
@@ -999,7 +1032,7 @@ if __name__ == "__main__":
             print("Measurements beginning...")
             
             # Define filename
-            filename = "kawasaki_energy_and_specific_heat_5.txt"
+            filename = "kawasaki_energy_and_specific_heat_8.txt"
             
             # Run the simulation
             sim.run_kawasaki(filename)
