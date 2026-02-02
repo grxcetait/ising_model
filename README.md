@@ -2,7 +2,7 @@
 Python script for simulating the Ising Model in 2D according to Glauber or Kawasaki dynamics.
 
 ## ising_model.py
-This script can either run an animation or take measurements of the simulation of the Ising Model.
+This script can either run an animation or take measurements of the simulation of the Ising Model. Upon running the script, there will be prompts for user input to choose and customise the animation or measurement conditions.
 
 ## Instructions for running the code
 1. Run the file ising_model.py
