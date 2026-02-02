@@ -293,7 +293,7 @@ class Simulation(object):
     and saves datafiles and plots. 
     """
     
-    def __init__(self, n, T, dynamics):
+    def __init__(self, n, T, steps, dynamics):
         """
         Initialises and defines parameters for the simulation.
 
@@ -316,11 +316,12 @@ class Simulation(object):
         self.n = n # Size of the two-dimensional square lattice
         self.N = n * n # Total number of spins in the square lattice (1 sweep)
         self.T = T # Thermal energy
+        self.steps = steps # Choice of number of steps for the animation
         self.dynamics = dynamics # Choice of the dynamics algorithm
         self.ising_model = IsingModel(n, T) # Pass parameters into IsingModel
         self.ising_model.initialise() # Create the initial Ising Model square lattice
     
-    def simulate(self, steps = 100100):
+    def simulate(self, steps = 50000):
         """
         Runs an animation of the square lattice according to the chosen Monte
         Carlo simulation dynamics (Glauber or Kawasaki).
@@ -328,7 +329,7 @@ class Simulation(object):
         Parameters
         ----------
         steps : int, optional
-            The total number of Monte Carlo steps to run. The default is 50100.
+            The total number of Monte Carlo steps to run. The default is 50000.
 
         Returns
         -------
@@ -354,8 +355,8 @@ class Simulation(object):
         for s in range(steps):
             dynamics()
 
-            # Update animation every 100 steps
-            if s % 100 == 0:
+            # Update animation every 50 steps
+            if s % 50 == 0:
                 
                 # Update the data in the existing plot
                 im.set_data(self.ising_model.lattice)
@@ -905,7 +906,7 @@ def lattice_size_prompt():
         try:
             n = int(input("Enter system size (n): "))
             
-            # If n is a positive integer, returnn
+            # If n is a positive integer, return
             if n > 0:
                 return n
             
@@ -963,6 +964,33 @@ def dynamics_prompt():
         dynamics = input("Enter the desired dynamics to be used, 'g' for Glauber or 'k' for Kawasaki: ")
         
     return dynamics
+
+def animation_steps_prompt():
+    """
+    Prompts the user to input the number of steps for the animation
+
+    Returns
+    -------
+    steps : int
+        The number of steps for the animation chosen by the user.
+
+    """
+    
+    # Loop to promt the user to enter a positive integer for the number of steps for the animation
+    while True:
+        try:
+            steps = int(input("Enter the number of steps for the animation: "))
+            
+            # If n is a positive integer, return
+            if steps > 0:
+                return steps
+            
+            # If not, prompt user again
+            else:
+                print("The number of steps must be a positive integer. Please try again.")
+            
+        except ValueError:
+            print("Please enter a valid integer.")
     
 
 if __name__ == "__main__":
@@ -984,10 +1012,11 @@ if __name__ == "__main__":
         # Prompt the user for animation parameters
         n = lattice_size_prompt()
         T = temperature_prompt()
+        steps = animation_steps_prompt()
         dynamics = dynamics_prompt()
         
         # Initialise and run the simulation
-        sim = Simulation(n, T, dynamics)
+        sim = Simulation(n, T, steps, dynamics)
         sim.simulate()
     
     # For measurements
@@ -1013,8 +1042,8 @@ if __name__ == "__main__":
             print("Measurements beginning...")
             
             # Define filenames
-            filename1 = "glauber_energy_and_specific_heat_8_noabsvalue.txt"
-            filename2 = "glauber_magnetisation_and_susceptibility_8_noabsvalue.txt"
+            filename1 = "glauber_energy_and_specific_heat_9.txt"
+            filename2 = "glauber_magnetisation_and_susceptibility_9.txt"
             
             # Run the simulation
             sim.run_glauber(filename1, filename2)
@@ -1032,7 +1061,7 @@ if __name__ == "__main__":
             print("Measurements beginning...")
             
             # Define filename
-            filename = "kawasaki_energy_and_specific_heat_8.txt"
+            filename = "kawasaki_energy_and_specific_heat_9.txt"
             
             # Run the simulation
             sim.run_kawasaki(filename)
