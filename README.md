@@ -11,6 +11,7 @@ This script can either run an animation or take measurements of the simulation o
 3. Select the system size N (recommended N = 50)
 4. In the case of animation, input the temperature T (a float between 1 and 3)
 5. In the case of animation, input the number of iterations to run for (recommended 10000)
-6. Select the dynamics to be used between Glauber ('g') or Kawasaki ('k')
-7. In the case of animation, the animation will run and remain open at the end until the user closes it.
-8. In the case of measurements, the output datafile and plots will be saved in the "outputs" file in the same directory as the ising_model.py file. The resulting plots for the measurements will appear on screen when the simulation and measurements are complete and will remain open at the end until the user closes it.
+6. Select the ordering of the initial lattice state to be ordered ('o') (with all spins pointing up) or disordered ('d') (with all spins randomised)
+7. Select the dynamics to be used between Glauber ('g') or Kawasaki ('k')
+8. In the case of animation, the animation will run and remain open at the end until the user closes it.
+9. In the case of measurements, the output datafile and plots will be saved in the "outputs" file in the same directory as the ising_model.py file. The resulting plots for the measurements will appear on screen when the simulation and measurements are complete and will remain open at the end until the user closes it.
