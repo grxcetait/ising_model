@@ -9,7 +9,7 @@ This script can either run an animation or take measurements of the simulation o
     For example: python3 ising_model.py
 2. Select between animation ('a') or measurements ('m')
 3. Select the system size N (recommended N = 50)
-4. In the case of animation, input the temperature T (a float between 1 and 3)
+4. In the case of animation, input the temperature T
 5. In the case of animation, input the number of iterations to run for (recommended 10000)
 6. Select the ordering of the initial lattice state to be ordered ('o') (with all spins pointing up) or disordered ('d') (with all spins randomised)
 7. Select the dynamics to be used between Glauber ('g') or Kawasaki ('k')
