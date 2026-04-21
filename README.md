@@ -50,8 +50,8 @@ Sweeps k_B T from 3.0 down to 1.0 in steps of 0.1. At each temperature, 100 swee
 # Glauber measurements, 50x50 lattice, disordered start
 python ising_model.py -m m -d g
 
-# Kawasaki measurements, ordered start
-python ising_model.py -m m -d k -o o
+# Kawasaki measurements, disordered start
+python ising_model.py -m m -d k -o d
 ```
 
 ## Output
