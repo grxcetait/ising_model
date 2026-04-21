@@ -4,14 +4,46 @@
 Created on Fri Jan 16 11:01:35 2026
 
 @author: gracetait
+"""
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Jan 16 11:01:35 2026
 
-Notes:
-    - Kawasaki really not running correctly. Not sure what's wrong. Debug!
-    - Need to write readme still
+@author: gracetait
 """
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import argparse
+from numba import njit
+
+@njit
+def calculate_local_energy(i, j, n, lattice, site_spin, J):
+    """
+    Calculates the local energy of site (i, j) with its four nearest neighbours.
+
+    Arguments:
+        i: row index of the site
+        j: column index of the site
+        n: system size
+        lattice: spin lattice
+        site_spin: spin value at site (i, j)
+        J: coupling constant
+
+    Returns:
+        local energy at site (i, j) with its four nearest neighbours
+    """
+
+    # Get the nearest neighbours of the site using modulus for periodic boundaries
+    up = lattice[(i - 1) % n, j]
+    down = lattice[(i + 1) % n, j]
+    left = lattice[i, (j - 1) % n]
+    right = lattice[i, (j + 1) % n]
+
+    # Energy = -J * site * (sum of nearest neighbours)
+    return - J * site_spin * (up + down + left + right)
+
 
 class IsingModel(object):
     """
@@ -20,7 +52,7 @@ class IsingModel(object):
     Glauber and Kawasaki dynamics can be chosen for the Monte Carlo simulation.
     """
     
-    def __init__(self, n, kbT, ordering):
+    def __init__(self, n, kbT, ordering, J=1):
         """
         Initialises and defines parameters for the Ising Model square lattice.
 
@@ -30,6 +62,10 @@ class IsingModel(object):
             The length of the square lattice
         kbT : float
             The thermal energy of the system 
+        ordering : str
+            The choice of the initial lattice to be ordered ('o') or disordered ('d')
+        J : float, optional
+            The coupling constant. The default is 1.
 
         Returns
         -------
@@ -42,6 +78,7 @@ class IsingModel(object):
         self.N = n * n # Total number of spins in the square lattice
         self.kbT = kbT # Thermal energy
         self.ordering = ordering # Choice of the initial lattice to be ordered or disordered
+        self.J = J # Coupling constant
         self.lattice = None 
         
     def initialise(self):
@@ -185,9 +222,9 @@ class IsingModel(object):
         
         # If the sites are neighbours, the change in energy double counted the same site
         # Twice in the current and trial states
-        # So, correct for it by adding 4 since the spins are always opposite 
+        # So, correct for it by adding 4*J since the spins are always opposite 
         if is_neighbor:
-           del_E += 4 
+           del_E += 4 * self.J
 
         # Swap the signs of the lattice sites according to the Metropolis algorithm
         # Swap the signs if del_E is equal to or less than zero
@@ -238,15 +275,9 @@ class IsingModel(object):
             The local energy calculated at the site (i, j) with its four nearest neighbours.
 
         """
-    
-        # Get the nearest neighbours of the site using modulus for periodic boundaries
-        up = self.lattice[(i - 1) % self.n, j]
-        down = self.lattice[(i + 1) % self.n, j]
-        left = self.lattice[i, (j - 1) % self.n]
-        right = self.lattice[i, (j + 1) % self.n]
-    
-        # Energy = - site * (sum of nearest neighbours)
-        return - site_spin * (up + down + left + right)
+
+        # Call the jit-compiled standalone function, passing the coupling constant
+        return calculate_local_energy(i, j, self.n, self.lattice, site_spin, self.J)
     
     def calculate_magnetisation(self):
         """
@@ -276,7 +307,7 @@ class IsingModel(object):
         
         # Sum of -J * Si * Sj for all unique neighbor pairs
         # Using np.roll allows us to avoids double-counting bonds
-        tot_E = - (np.sum(self.lattice * np.roll(self.lattice, 1, axis=0)) + 
+        tot_E = - self.J * (np.sum(self.lattice * np.roll(self.lattice, 1, axis=0)) + 
                     np.sum(self.lattice * np.roll(self.lattice, 1, axis=1))) 
         
         # Here, np.roll is used by shifting the lattice by one unit horizontally and vertically
@@ -300,7 +331,7 @@ class Simulation(object):
     and saves datafiles and plots. 
     """
     
-    def __init__(self, n, kbT, steps, ordering, dynamics):
+    def __init__(self, n, kbT, steps, ordering, dynamics, J=1):
         """
         Initialises and defines parameters for the simulation.
 
@@ -310,8 +341,14 @@ class Simulation(object):
             The length of the square lattice
         kbT : float
             The thermal energy of the system
+        steps : int
+            The number of steps for the animation
+        ordering : str
+            The choice of the initial lattice to be ordered ('o') or disordered ('d')
         dynamics : str
             The choice of the dynamics algorithm ('g' for Glauber or 'k' for Kawasaki)
+        J : float, optional
+            The coupling constant. The default is 1.
 
         Returns
         -------
@@ -326,16 +363,12 @@ class Simulation(object):
         self.steps = steps # Choice of number of steps for the animation
         self.dynamics = dynamics # Choice of the dynamics algorithm
         self.ordering = ordering # Choice of the initial lattice to be ordered or disordered
+        self.J = J # Coupling constant
     
-    def simulate(self, steps = 50000):
+    def simulate(self):
         """
         Runs an animation of the square lattice according to the chosen Monte
         Carlo simulation dynamics (Glauber or Kawasaki).
-
-        Parameters
-        ----------
-        steps : int, optional
-            The total number of Monte Carlo steps to run. The default is 50000.
 
         Returns
         -------
@@ -344,7 +377,7 @@ class Simulation(object):
         """
         
         # Initialise the lattice using the IsingModel class
-        ising_model = IsingModel(self.n, self.kbT, self.ordering) # Pass parameters into IsingModel
+        ising_model = IsingModel(self.n, self.kbT, self.ordering, self.J) # Pass parameters into IsingModel
         ising_model.initialise() # Create the initial Ising Model square lattice
         
         # Define the figure and axes for the animation 
@@ -361,12 +394,15 @@ class Simulation(object):
         else:
             dynamics = ising_model.kawasaki_dynamics
         
+        # Run the simulation for N^2 total steps to show the well-equilibrated end result
+        steps = self.N ** 2
+        
         # Run the simulation for the total number of steps
         for s in range(steps):
             dynamics()
 
-            # Update animation every 50 steps
-            if s % 50 == 0:
+            # Update animation every 10 sweeps
+            if s % (self.N * 10) == 0:
                 
                 # Update the data in the existing plot
                 im.set_data(ising_model.lattice)
@@ -429,23 +465,25 @@ class Simulation(object):
     
     def calculate_average_magnetisation(self, tot_M_list):
         """
-        Calculates the mean absolute magnetisation based on the energy measurements.
+        Calculates the mean absolute magnetisation based on the magnetisation measurements.
 
         Parameters
         ----------
-        tot_E_list : list or np.array
-            A collection of total energy values recorded during the simulation
+        tot_M_list : list or np.array
+            A collection of total magnetisation values recorded during the simulation
             after the system has reached equilibrium.
 
         Returns
         -------
         float
-            The mean absolute magnetisation based on the energy measurements.
+            The mean absolute magnetisation based on the magnetisation measurements.
 
         """
         
         # Calculate and return the mean absolute magnetisation
-        return np.mean(np.abs(tot_M_list))
+        # np.abs is applied to the mean (not to each element) to correctly reflect
+        # the average signed magnetisation of the system
+        return np.abs(np.mean(tot_M_list))
     
     def calculate_susceptibility(self, tot_M_list):
         """
@@ -454,6 +492,9 @@ class Simulation(object):
 
         Parameters
         ----------
+        tot_M_list : list or np.array
+            A collection of total magnetisation values recorded during the simulation
+            after the system has reached equilibrium.
         tot_E_list : list or np.array
             A collection of total energy values recorded during the simulation
             after the system has reached equilibrium.
@@ -557,10 +598,10 @@ class Simulation(object):
             os.makedirs(datafiles_folder)
         
         # Create a range for k_B T between 3 and 1 in steps of 0.1
-        temperatures = np.arange(3.0, 0.9, -0.1)
+        temperatures = np.round(np.arange(3.0, 0.9, -0.1), 1)
         
         # Initialise the lattice using the IsingModel class and start at the hottest T (3)
-        ising_model = IsingModel(self.n, 3, self.ordering) # Pass parameters into IsingModel
+        ising_model = IsingModel(self.n, 3, self.ordering, self.J) # Pass parameters into IsingModel
         ising_model.initialise() # Create the initial Ising Model square lattice
         
         # Iterate through all temperatures
@@ -654,15 +695,15 @@ class Simulation(object):
             os.makedirs(datafiles_folder)
         
         # Create a range for k_B T between 3 and 1 in steps of 0.1
-        temperatures = np.arange(3.0, 0.9, -0.1)
+        temperatures = np.round(np.arange(3.0, 0.9, -0.1), 1)
         
         # Initialise the lattice using the IsingModel class and start at the hottest T (3)
-        ising_model = IsingModel(self.n, 3, self.ordering) # Pass parameters into IsingModel
+        ising_model = IsingModel(self.n, 3, self.ordering, self.J) # Pass parameters into IsingModel
         ising_model.initialise() # Create the initial Ising Model square lattice
         
         # Iterate through all temperatures
         for T in temperatures:
-            print(f"Simulating T = {T:.1f}...")
+            print(f"Simulating kbT = {T:.1f}...")
             
             # Make sure the model this class knows the new temperature
             ising_model.kbT = T
@@ -959,15 +1000,17 @@ def thermal_energy_prompt():
             kbT = float(input("Enter temperature (T): "))
             
             # If T is a within 1 and 3, return T
-            if kbT >= 1 and kbT <= 3:
-                return kbT
+            #if kbT >= 1 and kbT <= 3:
+                #return kbT
             
             # If not, prompt user again
-            else:
-                print("The thermal energy must be a float between 1 and 3. Please try again.")
+            #else:
+                #print("The thermal energy must be a float between 1 and 3. Please try again.")
+            return kbT
                 
         except ValueError:
-            print("The thermal energy must be a float between 1 and 3. Please try again.")
+            #print("The thermal energy must be a float between 1 and 3. Please try again.")
+            print("Invalid. Please try again.")
                 
 def dynamics_prompt():
     """
@@ -1031,49 +1074,43 @@ def initialise_state():
     
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='2D Ising Model Monte Carlo simulation')
     
-    # Promt the user for animation or measurements using a single character
-    ani_or_mea = input("Enter 'a' for Animation or 'm' for Measurements: ")
+    # User input parameters
+    parser.add_argument('-n', '--size', type=int, default=50,
+                        help='System size (default: 50)')
+    parser.add_argument('-T', '--temperature', type=float, default=2.0,
+                        help='Thermal energy kbT, used for animation mode (default: 2.0)')
+    parser.add_argument('-J', '--coupling', type=float, default=1,
+                        help='Coupling constant (default: 1)')
+    parser.add_argument('-d', '--dynamics', type=str, choices=['g', 'k'], default='g',
+                        help="Dynamics type: 'g' for Glauber, 'k' for Kawasaki (default: 'g')")
+    parser.add_argument('-o', '--ordering', type=str, choices=['o', 'd'], default='d',
+                        help="Initial lattice ordering: 'o' for ordered, 'd' for disordered (default: 'd')")
+    parser.add_argument('-m', '--mode', type=str, choices=['a', 'm'], default='a',
+                        help="Run mode: 'a' for animation, 'm' for measurements (default: 'a')")
     
-    # If the correct characetrs were not chosen, promt the user to try again
-    while ani_or_mea not in ['a', 'm']:
-        
-        print("Invalid entry. Please try again.")
-        ani_or_mea = input("Enter 'a' for Animation or 'm' for Measurements: ")
+    args = parser.parse_args()
     
     # For animation
-    if ani_or_mea == 'a':
+    if args.mode == 'a':
         
         print("Animation selected")
         
-        # Prompt the user for animation parameters
-        n = lattice_size_prompt()
-        kbT = thermal_energy_prompt()
-        steps = animation_steps_prompt()
-        ordering = initialise_state()
-        dynamics = dynamics_prompt()
-        
         # Initialise and run the simulation
-        sim = Simulation(n, kbT, steps, ordering, dynamics)
+        sim = Simulation(args.size, args.temperature, 0, args.ordering, args.dynamics, args.coupling)
         sim.simulate()
     
     # For measurements
-    elif ani_or_mea == 'm':
+    elif args.mode == 'm':
         
         print("Measurements selected")
         
-        # Prompt the user for measurement parameters
-        n = lattice_size_prompt()
-        kbT = 3 # since measurements option doesn't need a temperature
-        steps = 0 # since measurements option doesn't require any steps
-        ordering = initialise_state()
-        dynamics = dynamics_prompt()
-        
         # Initialise the simulation
-        sim = Simulation(n, kbT, steps, ordering, dynamics)
+        sim = Simulation(args.size, 3, 0, args.ordering, args.dynamics, args.coupling)
         
         # Run the simulation using Glauber dynamics
-        if dynamics == 'g':
+        if args.dynamics == 'g':
             
             # Print messages
             print("Glauber dynamics was chosen.")
@@ -1082,8 +1119,8 @@ if __name__ == "__main__":
             print("Measurements beginning...")
             
             # Define filenames
-            filename1 = "glauber_energy_and_specific_heat.txt"
-            filename2 = "glauber_magnetisation_and_susceptibility.txt"
+            filename1 = "glauber_energy_and_specific_heat_final.txt"
+            filename2 = "glauber_magnetisation_and_susceptibility_final.txt"
             
             # Run the simulation
             sim.run_glauber(filename1, filename2)
@@ -1101,10 +1138,11 @@ if __name__ == "__main__":
             print("Measurements beginning...")
             
             # Define filename
-            filename = "kawasaki_energy_and_specific_heat.txt"
+            filename = "kawasaki_energy_and_specific_heat_final.txt"
             
             # Run the simulation
             sim.run_kawasaki(filename)
             
             # Plot the data
             sim.plot_energy_and_specific_heat(filename)
+ 
