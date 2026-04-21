@@ -1,17 +1,70 @@
 # Ising Model
-Python script for simulating the Ising Model in 2D according to Glauber or Kawasaki dynamics.
+Python script for simulating the Ising Model on a square (n x n) lattice using Model Carlo methods. Both Glauber (spin-flip) and Kawasaki (spin-exchange) dynamics are supported, with the Metropolis acceptance criterion. 
 
-## ising_model.py
-This script can either run an animation or take measurements of the simulation of the Ising Model. Upon running the script, there will be prompts for user input to choose and customise the animation or measurement conditions.
+## Dependencies
 
-## Instructions for running the code
-1. Run the file ising_model.py
-    For example: python3 ising_model.py
-2. Select between animation ('a') or measurements ('m')
-3. Select the system size N (recommended N = 50)
-4. In the case of animation, input the temperature T
-5. In the case of animation, input the number of iterations to run for (recommended 10000)
-6. Select the ordering of the initial lattice state to be ordered ('o') (with all spins pointing up) or disordered ('d') (with all spins randomised)
-7. Select the dynamics to be used between Glauber ('g') or Kawasaki ('k')
-8. In the case of animation, the animation will run and remain open at the end until the user closes it.
-9. In the case of measurements, the output datafile and plots will be saved in the "outputs" file in the same directory as the ising_model.py file. The resulting plots for the measurements will appear on screen when the simulation and measurements are complete and will remain open at the end until the user closes it.
+- Python 3.8+
+- NumPy
+- Matplotlib
+- Numba
+
+Install dependencies with:
+
+```bash
+pip install numpy matplotlib numba
+```
+
+## Arguments
+
+The script is run from the terminal using command-line arguments (flags). All arguments are optional — defaults are shown below.
+
+- 'n', Lattice side length. The simulation grid is (n x n), Default = 50
+- 'T', Thermal energy k_B T (animation mode only). Default = 2.0
+- 'J', Coupling constant J. Default = 1
+- 'd', Dynamics: 'g' = Glauber, 'k' = Kawasaki. Default = 'g'
+- 'o', Initial state: 'o' = ordered (all up), 'd' = disordered (random). Default = 'd'
+- 'm', Run mode: 'a' = animation, 'm' = measurements. Default = 'a'
+
+## Command line examples
+
+### Animation (`--mode ani`)
+
+Runs a live animation of the lattice evolving under the chosen dynamics. The simulation runs for N² total steps (where N = n²), updating the display every 10 sweeps.
+
+```bash
+# Default: 50x50 lattice, Glauber dynamics, kbT=2.0, disordered start
+python ising_model.py
+
+# Kawasaki dynamics, ordered start, kbT=1.5
+python ising_model.py -d k -o o -T 1.5
+
+# Larger lattice, low temperature
+python ising_model.py -n 100 -T 1.0
+```
+
+### Measurements (`--mode mea`)
+
+Sweeps k_B T from 3.0 down to 1.0 in steps of 0.1. At each temperature, 100 sweeps are used for equilibration, then measurements are taken every 10 sweeps for 10,000 sweeps (1,000 measurements per temperature). Error bars on the specific heat are computed using the Bootstrap method.
+
+```bash
+# Glauber measurements, 50x50 lattice, disordered start
+python ising_model.py -m m -d g
+
+# Kawasaki measurements, ordered start
+python ising_model.py -m m -d k -o o
+```
+
+## Output
+All outputs are saved relative to the scipt's directory:
+
+```
+outputs/
+├── datafiles/
+│   ├── glauber_energy_and_specific_heat_final.txt
+│   ├── glauber_magnetisation_and_susceptibility_final.txt
+│   └── kawasaki_energy_and_specific_heat_final.txt
+└── plots/
+    ├── glauber_energy_and_specific_heat_final_plot.png
+    ├── glauber_magnetisation_and_susceptibility_final_plot.png
+    └── kawasaki_energy_and_specific_heat_final_plot.png
+```
