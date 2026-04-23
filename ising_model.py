@@ -16,16 +16,21 @@ def calculate_local_energy(i, j, n, lattice, site_spin, J):
     """
     Calculates the local energy of site (i, j) with its four nearest neighbours.
 
-    Arguments:
-        i: row index of the site
-        j: column index of the site
-        n: system size
-        lattice: spin lattice
-        site_spin: spin value at site (i, j)
-        J: coupling constant
+    Parameters
+    ----------
+    i : int
+        The row index of the site.
+    j : int
+        The column index of the site.
+    site_spin : int
+        The spin value up (+1) or down (-1) at the site
+    J: int
+        Coupling constant
 
-    Returns:
-        local energy at site (i, j) with its four nearest neighbours
+    Returns
+    -------
+    int
+        The local energy calculated at the site (i, j) with its four nearest neighbours.
     """
 
     # Get the nearest neighbours of the site using modulus for periodic boundaries
@@ -41,18 +46,28 @@ def calculate_local_energy(i, j, n, lattice, site_spin, J):
 @njit
 def glauber_sweep(lattice, n, N, kbT, J):
     """
-    Performs one full sweep (N steps) of the Glauber (spin-flip) Monte Carlo simulation.
+    Performs a single step of the Glauber (spin-flip) Monte Carlo simulation.
+    This method picks a random site in the square lattice and decides whether to flip the spin
+    based on the Metropolis algorithm. 
     Runs entirely in compiled code to avoid Python overhead.
 
-    Arguments:
-        lattice: spin lattice
-        n: system size
-        N: number of steps per sweep (= n * n)
-        kbT: thermal energy
-        J: coupling constant
+    Parameters
+    ----------
+        lattice : numpy.ndarray
+            A 2D array of shape (n, n) with random spin states of up (+1) or down (-1)
+        n : int
+            The length of the square lattice
+        N : int
+            The number of steps per sweep (n * n)
+        kbT : float
+            Thermal energy
+        J : float
+            Coupling constant
 
-    Returns:
-        total energy change over the sweep
+    Returns
+    -------
+    del_E_total : float
+        The total energy change over the sweep of the Glauber (spin-flip) Monte Carlo simulation.
     """
 
     # Initialise total energy change for this sweep
@@ -68,21 +83,28 @@ def glauber_sweep(lattice, n, N, kbT, J):
         # Obtain the current spin of the random site
         site_spin = lattice[i, j]
 
-        # Calculate energy of the current state and the change in energy upon flipping
+        # Calculate energy of the current state and trial state
         E_current = calculate_local_energy(i, j, n, lattice, site_spin, J)
         del_E = - 2.0 * E_current
 
-        # Flip the spin according to the Metropolis algorithm
+        # Flip the signs of the lattice sites according to the Metropolis algorithm
+        # Flip the signs if del_E is equal to or less than zero
         if del_E <= 0:
 
-            # Always accept energy-lowering flip
+            # Flip the sign
             lattice[i, j] *= -1
+            
+            # Add energy change to total energy change
             del_E_total += del_E
 
+        # Generate a random number
+        # Swap the signs if r is less than the boltzmann probability
         elif np.random.random() < np.exp(- del_E / kbT):
 
-            # Accept energy-raising flip with Boltzmann probability
+            # Flip the sign
             lattice[i, j] *= -1
+            
+            # Add energy change to total energy change
             del_E_total += del_E
 
     return del_E_total
@@ -92,17 +114,28 @@ def glauber_sweep(lattice, n, N, kbT, J):
 def kawasaki_sweep(lattice, n, N, kbT, J):
     """
     Performs one full sweep (N steps) of the Kawasaki (spin-exchange) Monte Carlo simulation.
+    This method picks two random sites in the square lattice and decides whether to exchange
+    the spins based on the Metropolis algorithm.
     Runs entirely in compiled code to avoid Python overhead.
+    
 
-    Arguments:
-        lattice: spin lattice
-        n: system size
-        N: number of steps per sweep (= n * n)
-        kbT: thermal energy
-        J: coupling constant
+    Parameters
+    ----------
+        lattice : numpy.ndarray
+            A 2D array of shape (n, n) with random spin states of up (+1) or down (-1)
+        n : int
+            The length of the square lattice
+        N : int
+            The number of steps per sweep (n * n)
+        kbT : float
+            Thermal energy
+        J : float
+            Coupling constant
 
-    Returns:
-        total energy change over the sweep
+    Returns
+    -------
+    del_E_total : float
+        The total energy change over the sweep of the Glauber (spin-flip) Monte Carlo simulation.
     """
 
     # Initialise total energy change for this sweep
@@ -156,19 +189,26 @@ def kawasaki_sweep(lattice, n, N, kbT, J):
         if is_neighbor:
             del_E += 4.0 * J
 
-        # Swap the spins according to the Metropolis algorithm
+        # Swap the signs of the lattice sites according to the Metropolis algorithm
+        # Swap the signs if del_E is equal to or less than zero
         if del_E <= 0:
 
-            # Always accept energy-lowering swap
+            # Swap the sites
             lattice[i, j] = site_km_spin
             lattice[k, m] = site_ij_spin
+            
+            # Add change in energy to the total change in energy
             del_E_total += del_E
 
+        # Generate a random number
+        # Swap the signs if r is less than the boltzmann probability
         elif np.random.random() < np.exp(- del_E / kbT):
 
-            # Accept energy-raising swap with Boltzmann probability
+            # Swap the sites
             lattice[i, j] = site_km_spin
             lattice[k, m] = site_ij_spin
+            
+            # Add change in energy to the total change in energy
             del_E_total += del_E
 
     return del_E_total
@@ -190,11 +230,11 @@ class IsingModel(object):
         n : int
             The length of the square lattice
         kbT : float
-            The thermal energy of the system
+            Thermal energy
         ordering : str
             The choice of the initial lattice to be ordered ('o') or disordered ('d')
-        J : float, optional
-            The coupling constant. The default is 1.
+        J : float
+            Coupling constant
 
         Returns
         -------
@@ -226,14 +266,12 @@ class IsingModel(object):
         # Create a two-dimensional square lattice
         # Where -1 is down and 1 is up
         # Create an ordered or disordered lattice based on user input
-        # Use int32 for better numba performance
+        # Use int32 for better Numba performance
         if self.ordering == 'd': # For a disordered initial lattice
             self.lattice = np.random.choice([-1, 1], size=(self.n, self.n)).astype(np.int32)
 
         else: # For an ordered initial lattice with all spins up
             self.lattice = np.ones((self.n, self.n), dtype=np.int32)
-
-        #return self.lattice
 
     def calculate_magnetisation(self):
         """
@@ -242,7 +280,7 @@ class IsingModel(object):
         Returns
         -------
         int
-            The total amgnetisation of the lattice, representing the sum of all
+            The total magnetisation of the lattice, representing the sum of all
             of the individual spin values of up (+1) or down (-1).
 
         """
@@ -293,15 +331,15 @@ class Simulation(object):
         n : int
             The length of the square lattice
         kbT : float
-            The thermal energy of the system
+            Thermal energy
         steps : int
             The number of steps for the animation
         ordering : str
             The choice of the initial lattice to be ordered ('o') or disordered ('d')
         dynamics : str
             The choice of the dynamics algorithm ('g' for Glauber or 'k' for Kawasaki)
-        J : float, optional
-            The coupling constant. The default is 1.
+        J : float
+            The coupling constant. 
 
         Returns
         -------
@@ -346,24 +384,18 @@ class Simulation(object):
         else:
             sweep = kawasaki_sweep
 
-        # Run the simulation for N^2 total sweeps to show the well-equilibrated end result
-        total_sweeps = self.N
+        # Run the simulation for the total number of steps
+        for s in range(self.steps):
 
-        # Run the simulation for the total number of sweeps
-        for s in range(total_sweeps):
-
-            # Run one full sweep using the compiled function
+            # Run one full sweep using Numba
             sweep(ising_model.lattice, self.n, self.N, self.kbT, self.J)
 
-            # Update animation every 10 sweeps
-            if s % 10 == 0:
+            # Update the data in the existing plot
+            im.set_data(ising_model.lattice)
+            ax.set_title(f"Sweep: {s} | Thermal Energy: {self.kbT}")
 
-                # Update the data in the existing plot
-                im.set_data(ising_model.lattice)
-                ax.set_title(f"Sweep: {s} | Thermal Energy: {self.kbT}")
-
-                # Keep the image up while the script is running
-                plt.pause(0.001)
+            # Keep the image up while the script is running
+            plt.pause(0.001)
 
         # Keep the final image open when the loop finishes
         plt.show()
@@ -406,8 +438,6 @@ class Simulation(object):
             energy measurements.
 
         """
-
-        #return np.var(tot_E_list) / (self.N * self.T**2)
 
         # Convert to numpy array
         tot_E_list = np.array(tot_E_list)
@@ -455,10 +485,7 @@ class Simulation(object):
             energy measurements.
 
         """
-
-        #return np.var(np.abs(tot_M_list)) / (self.N * self.T) # this uses the absolute value but that is wrong
-        #return np.var(tot_M_list) / (self.N * self.T) # calcualte the susceptibility not using the absolute value
-
+        
         # Convert to numpy array
         tot_M_list = np.array(tot_M_list)
 
@@ -496,12 +523,11 @@ class Simulation(object):
         # Resampling 1000 times is sufficient
         for j in range(1000):
 
-             # Randomnly resample from the n measurements
+             # Randomly resample from the n measurements
              ind = np.random.randint(0, n, size = n)
              resample = data[ind]
 
              # Calculate specific heat accordingly
-             #value = np.var(resample) / (self.N * self.kbT**2)
              mean_E_sq = np.mean(resample**2)
              mean_E = np.mean(resample)**2
              value = (mean_E_sq - mean_E) / (self.N * self.kbT**2)
@@ -552,7 +578,7 @@ class Simulation(object):
         ising_model = IsingModel(self.n, 3, self.ordering, self.J) # Pass parameters into IsingModel
         ising_model.initialise() # Create the initial Ising Model square lattice
 
-        # Warm up the numba function with a single call before the main loop
+        # Warm up the Numba function with a single call before the main loop
         kawasaki_sweep(ising_model.lattice, self.n, 1, 3.0, self.J)
 
         # Iterate through all temperatures
@@ -566,7 +592,7 @@ class Simulation(object):
             # Make an empty list for the new temperature
             tot_E_list = []
 
-            # Equilibrate the system for 200 sweeps using the compiled sweep function
+            # Equilibrate the system for 200 sweeps using Numba
             for _ in range(200):
                 kawasaki_sweep(ising_model.lattice, self.n, self.N, T, self.J)
 
@@ -576,7 +602,7 @@ class Simulation(object):
             # Take 1000 measurements, one every 10 sweeps
             for _ in range(1000):
 
-                # Run 10 sweeps between measurements using the compiled sweep function
+                # Run 10 sweeps between measurements using Numba
                 for _ in range(10):
                     del_E = kawasaki_sweep(ising_model.lattice, self.n, self.N, T, self.J)
 
@@ -654,7 +680,7 @@ class Simulation(object):
             tot_E_list = []
             tot_M_list = []
 
-            # Equilibrate the system for 200 sweeps using the compiled sweep function
+            # Equilibrate the system for 200 sweeps using Numba
             for _ in range(200):
                 glauber_sweep(ising_model.lattice, self.n, self.N, T, self.J)
 
@@ -664,7 +690,7 @@ class Simulation(object):
             # Take 1000 measurements, one every 10 sweeps
             for _ in range(1000):
 
-                # Run 10 sweeps between measurements using the compiled sweep function
+                # Run 10 sweeps between measurements using Numba
                 for _ in range(10):
                     del_E = glauber_sweep(ising_model.lattice, self.n, self.N, T, self.J)
 
@@ -881,123 +907,6 @@ class Simulation(object):
         plt.show()
 
 
-def lattice_size_prompt():
-    """
-    Prompts the suer to enter a positive integer for the Ising Model square
-    lattice system size.
-
-    Returns
-    -------
-    n : int
-        The system size (n) provided by the user.
-
-    """
-
-    # Loop to promt the user to enter a positive integer for n
-    while True:
-        try:
-            n = int(input("Enter system size (n): "))
-
-            # If n is a positive integer, return
-            if n > 0:
-                return n
-
-            # If not, prompt user again
-            else:
-                print("The system size (n) must be a positive integer. Please try again.")
-
-        except ValueError:
-            print("Please enter a valid integer.")
-
-def thermal_energy_prompt():
-    """
-    Prompts the user to enter a thermal energy value between 1 and 3.
-
-    Returns
-    -------
-    T : float
-        The temperature (T) provided by the user.
-
-    """
-
-    # Loop to prompt the user to enter a thermal energy value between 1 and 3
-    while True:
-        try:
-            kbT = float(input("Enter temperature (T): "))
-
-            # If T is a within 1 and 3, return T
-            #if kbT >= 1 and kbT <= 3:
-                #return kbT
-
-            # If not, prompt user again
-            #else:
-                #print("The thermal energy must be a float between 1 and 3. Please try again.")
-            return kbT
-
-        except ValueError:
-            #print("The thermal energy must be a float between 1 and 3. Please try again.")
-            print("Invalid. Please try again.")
-
-def dynamics_prompt():
-    """
-    Prompts the user to choose between Glauber ('g') ir Kawasaki ('k') dynamics.
-
-    Returns
-    -------
-    dynamics : str
-        A single character ('g' or 'k') representing the chosen dynamics.
-
-    """
-
-    # Promt the user to enter a single character to choose the dynamics
-    dynamics = input("Enter the desired dynamics to be used, 'g' for Glauber or 'k' for Kawasaki: ")
-
-    # If the correct charactesr were not chosen, prompt the user to try again
-    while dynamics not in ['g', 'k']:
-        print("Dynamics not recognised. Please try again.")
-        dynamics = input("Enter the desired dynamics to be used, 'g' for Glauber or 'k' for Kawasaki: ")
-
-    return dynamics
-
-def animation_steps_prompt():
-    """
-    Prompts the user to input the number of steps for the animation
-
-    Returns
-    -------
-    steps : int
-        The number of steps for the animation chosen by the user.
-
-    """
-
-    # Loop to promt the user to enter a positive integer for the number of steps for the animation
-    while True:
-        try:
-            steps = int(input("Enter the number of steps for the animation: "))
-
-            # If n is a positive integer, return
-            if steps > 0:
-                return steps
-
-            # If not, prompt user again
-            else:
-                print("The number of steps must be a positive integer. Please try again.")
-
-        except ValueError:
-            print("Please enter a valid integer.")
-
-def initialise_state():
-
-    # Promt the user to enter a single character to choose the ordering of the initial state
-    ordering = input("Enter the desired ordering of the initial state, 'o' for ordered or 'd' for disordered: ")
-
-    # If the correct character was not chosen, prompt the user to try again
-    while ordering not in ['o', 'd']:
-        print("Initial state not recognised. Please try again.")
-        ordering = input("Enter the desired ordering of the initial state, 'o' for ordered or 'd' for disordered: ")
-
-    return ordering
-
 
 if __name__ == "__main__":
     """Parse command line arguments"""
@@ -1069,82 +978,3 @@ if __name__ == "__main__":
 
             # Plot the data
             sim.plot_energy_and_specific_heat(filename)
-
-def plot_electric_field_measurements(self, filename):
-
-    # Define datafiles output directory
-    base_directory = os.path.dirname(os.path.abspath(__file__))
-    outputs_directory = os.path.join(base_directory, "outputs")
-    filename_path = os.path.join(outputs_directory, "datafiles", filename)
-    plots_folder = os.path.join(outputs_directory, "plots")
-
-    # If the folders dont exist, create them
-    if not os.path.exists(plots_folder):
-        os.makedirs(plots_folder)
-
-    # Create an empty list to store input data
-    input_data = []
-
-    # Read in the data from the specified text file
-    try:
-        with open(filename_path, "r") as filein:
-            for line in filein:
-                input_data.append(line.strip("\n").split(","))
-
-    # If text file cannot be found, print error
-    except FileNotFoundError:
-        print(f"Error: Could not find {filename_path}")
-
-    # Create an empty lattice
-    E_x = np.zeros(shape = (self.l, self.l, self.l))
-    E_y = np.zeros(shape = (self.l, self.l, self.l))
-    E_z = np.zeros(shape = (self.l, self.l, self.l))
-    E = np.zeros(shape = (self.l, self.l, self.l))
-
-    # Convert input data into a np array
-    input_data = np.array(input_data[1:], dtype = float)
-
-    # Collect the input data
-    x = input_data[:, 4].astype(int)
-    y = input_data[:, 5].astype(int)
-    z = input_data[:, 6].astype(int)
-    E_x[x, y, z] = input_data[:, 0]
-    E_y[x, y, z] = input_data[:, 1]
-    E_z[x, y, z] = input_data[:, 2]
-    E[x, y, z] = input_data[:, 3]
-
-    # Extract the midplanes
-    E_x_midplane = E_x[:, :, self.l // 2]
-    E_y_midplane = E_y[:, :, self.l // 2]
-
-    # Create a meshgrid
-    X, Y = np.meshgrid(np.arange(self.l), np.arange(self.l))
-
-    # Skip every 5 pixels so the arrows aren't too crowded
-    skip = (slice(None, None, 5), slice(None, None, 5))
-
-    # Calculate the magnitude of the electric field in the x and y plane
-    mag = np.sqrt(E_x_midplane**2 + E_y_midplane**2)
-
-    # Create empty plots
-    fig, ax = plt.subplots(1, 1, figsize=(8, 10))
-
-    # Plot the potential
-    plot = ax.quiver(X[skip], Y[skip], (E_x_midplane / mag).T[skip],
-                     (E_y_midplane / mag).T[skip], cmap = "viridis")
-    ax.imshow(mag.T, origin="lower", cmap="viridis", alpha=0.4,
-      extent=[0, self.l, 0, self.l])
-    plt.colorbar(plot, label = "Field Magnitude $|E|$")
-    ax.set_title(r"Electric Field Vectors $E_x, E_y$", fontsize = 16)
-    ax.set_aspect("equal")
-
-    # Save the plots to the plots folder
-    save_filename = filename.replace(".txt", "_plot.png")
-    save_path = os.path.join(plots_folder, save_filename)
-    plt.savefig(save_path, dpi = 300)
-
-    # Print message
-    print(f"Plots successfully saved to: {save_path}")
-
-    # Show final plot
-    plt.show()
